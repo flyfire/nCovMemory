@@ -1,118 +1,150 @@
 const path = require('path');
+var fs = require('fs-extra');
+
 const Papa = require('papaparse');
 const Handlebars = require('handlebars');
-const { differenceInDays, parse, compareDesc } = require('date-fns');
+const { differenceInDays, parse, compareDesc, format } = require('date-fns');
 var querystring = require('querystring');
-var fs = require('fs-extra');
+
 const ARCHIVE = require('../archive/index');
+const { DATA } = require('../data/index');
+const { TEMPLATE, TEMPLATE_EN, ORDERING, LANGUAGES } = require('../template/index');
+const README_EN_PATH = path.join(__dirname, '..', 'README-en.md');
 const README_PATH = path.join(__dirname, '..', 'README.md');
-const DATA = require('../data/index');
-const ORDERING = require('../template/ordering.json');
-const TEMPLATE_PATH = path.join(__dirname, '..', 'template', 'README.handlebars');
+
+Map.prototype.toObject = function() {
+  const obj = {};
+  this.forEach((v, k) => {
+    obj[k] = v;
+  });
+  return obj;
+};
+
+function getUniqueValue(arrayOfObject, property) {
+  return arrayOfObject
+    .map((a) => a[property])
+    .filter((value, index, self) => {
+      return self.indexOf(value) === index;
+    });
+}
 
 Papa.parsePromise = function(file, options) {
   return new Promise(function(complete, error) {
     Papa.parse(file, { complete, error, ...options });
   });
 };
-let model = {
-  narrative: { articles: {}, medias: [] },
-  non_fiction: { articles: {}, medias: [] }
-};
 
 // Escape Markdown Link
-Handlebars.registerHelper('link', function(string) {
-  // return encodeURIComponent(string);
-  return (string = string.replace(/[\(|\)|（|）|<|>|《|》|【|】|\[|\]|、|\/]/g, '').toLowerCase());
-});
+function escapeLink(string) {
+  return (string = string
+    .replace(/[\(|\)|（|）|<|>|《|》|【|】|\[|\]|、|\/|,|，|\.|。]/g, '')
+    .replace(/\s/g, '-')
+    .toLowerCase());
+}
+
+Handlebars.registerHelper('link', escapeLink);
 
 // Escape Markdown Table
-Handlebars.registerHelper('table', function(string) {
+function escapeTable(string) {
   return (string = string.replace(/\|/g, '\\|'));
-});
+}
 
-// Indicate Narratives
-Handlebars.registerHelper('narrative', function(string) {
-  if (Object.keys(model['non_fiction'].articles).indexOf(string) !== -1) {
-    string = `${string}（个体）`;
-  }
-  return string;
-});
+Handlebars.registerHelper('table', escapeTable);
 
-Handlebars.registerHelper('narrative_link', function(string) {
-  if (Object.keys(model['non_fiction'].articles).indexOf(string) !== -1) {
-    string = `${string}（个体）`;
-  }
-  return (string = string.replace(/[\(|\)|（|）|<|>|《|》|【|】|\[|\]|、|\/]/g, '').toLowerCase());
-});
+function trimAttributes(object, attributes) {
+  attributes.forEach((a) => {
+    if (object.hasOwnProperty(a) && object[a]) {
+      object[a] = object[a].trim();
+    }
+  });
+}
 
-// function renameKey(o, old_key, new_key) {
-//   if (old_key !== new_key) {
-//     Object.defineProperty(o, new_key, Object.getOwnPropertyDescriptor(o, old_key));
-//     delete o[old_key];
-//   }
-// }
+function parseDate(a) {
+  return parse(a, 'yyyy-MM-dd', new Date());
+}
 
-async function generate() {
+async function generate(language, template, path) {
+  let viewModel = new Map();
+  const TEXTS = LANGUAGES[language];
   let now = new Date();
-  let csv = fs.readFileSync(DATA['data'].path, 'utf8');
-  // Read csv
-  let { data } = await Papa.parsePromise(csv, { header: true });
+
+  // Read csv & filter valid data
+  let { data } = await Papa.parsePromise(DATA.data, { header: true });
   data = data.filter(
     (entry) =>
       entry.id && entry.category && entry.title && entry.media && entry.date && entry.update
   );
-  // Extract medias and articles
-  for (let entry of data) {
-    // Calculate attributes
-    entry.title = entry.title.trim();
-    entry.media = entry.media.trim();
-    entry.is_new = differenceInDays(now, parse(entry.update, 'MM-dd', new Date())) <= 1;
+  if (language !== 'cn') {
+    data = data.filter((entry) => entry.title_en);
+  }
+
+  // Calculate attributes
+  data = data.map((entry) => {
+    trimAttributes(entry, ['title', 'title_en', 'media']);
+    entry.is_new = differenceInDays(now, parseDate(entry.update)) <= 1;
     entry.is_deleted = entry.is_deleted === 'true' || entry.is_deleted === 'TRUE';
     if (ARCHIVE.hasOwnProperty(entry.id)) {
       entry = { ...ARCHIVE[entry.id], ...entry };
     }
-    if (!model[entry.category].articles[entry.media]) {
-      model[entry.category].articles[entry.media] = [];
-    }
-    model[entry.category].articles[entry.media].push(entry);
-  }
+    return entry;
+  });
+  console.log(data);
 
-  // Sort
-  for (let cat in model) {
-    let orderedArticles = {};
-    for (let expectedMedia of ORDERING[cat]) {
-      console.log(`Generating ${expectedMedia} ...`);
-      orderedArticles[expectedMedia] = model[cat].articles[expectedMedia];
-      delete model[cat].articles[expectedMedia];
-    }
-    orderedArticles = Object.assign(model[cat].articles, orderedArticles);
-    for (let media in orderedArticles) {
-      orderedArticles[media] &&
-        orderedArticles[media].sort((a, b) =>
-          compareDesc(parse(a.date, 'MM-dd', new Date()), parse(b.date, 'MM-dd', new Date()))
-        );
-    }
-    model[cat].articles = orderedArticles;
-    model[cat].medias = Object.keys(model[cat].articles);
-    // Sort by name, no longer used
-    // model[cat].medias.sort(function compareFunction(param1, param2) {
-    //   return param1.localeCompare(param2, 'zh');
-    // });
-  }
+  // Organize & sort data
+  let categories = Object.keys(ORDERING);
+  categories.forEach((category) => {
+    let articlesOfCat = data.filter((d) => d.category === category);
+    // extract index of the category
+    let mediasOfCat = getUniqueValue(articlesOfCat, 'media').sort((a, b) => {
+      let expectedOrderA = ORDERING[category].indexOf(a);
+      let expectedOrderB = ORDERING[category].indexOf(b);
+      return expectedOrderA - expectedOrderB;
+    });
+    let articlesGroupedByMedia = new Map();
+    mediasOfCat.forEach((media) => {
+      let articlesOfMedia = articlesOfCat.filter((d) => d.media === media);
+      articlesOfMedia
+        .sort((a, b) => compareDesc(parseDate(a.date), parseDate(b.date)))
+        .forEach((article) => (article.date = format(parseDate(article.date), 'MM-dd')));
+      // Set the displayed name of media
+      let mediaName;
+      switch (language) {
+        case 'cn':
+          mediaName = media;
+          break;
+        default:
+          mediaName = TEXTS.media[media];
+          break;
+      }
+      if (
+        category === 'narrative' &&
+        data.find((d) => d.category === 'non_fiction' && d.media === media)
+      ) {
+        mediaName += TEXTS.media['NARRATIVE_INDICATOR'];
+      }
 
-  // for (media in model['narrative'].articles) {
-  //   if (Object.keys(model['non_fiction'].articles).indexOf(media) !== -1) {
-  //     renameKey(model['narrative'].articles, media, `${media}（个体）`);
-  //   }
-  // }
-  model['narrative'].medias = Object.keys(model['narrative'].articles);
+      articlesGroupedByMedia.set(mediaName, articlesOfMedia);
+    });
+    articlesGroupedByMedia = articlesGroupedByMedia.toObject();
 
-  let template = fs.readFileSync(TEMPLATE_PATH, 'utf8');
+    // Set the displayed name of category
+    let categoryName;
+    switch (category) {
+      case 'non_fiction':
+        categoryName = TEXTS.category.NON_FICTION;
+        break;
+      case 'narrative':
+        categoryName = TEXTS.category.NARRATIVE;
+        break;
+    }
+    viewModel.set(categoryName, articlesGroupedByMedia);
+  });
+  viewModel = viewModel.toObject();
+
   let runtime = Handlebars.compile(template);
-  const output = runtime(model);
-  fs.writeFileSync(README_PATH, output, 'utf-8');
-  console.log('Generate README succeed!');
+  fs.writeFileSync(path, runtime(viewModel), 'utf-8');
+  console.log(`Generate ${language} README succeed!`);
 }
 
-generate();
+generate('cn', TEMPLATE, README_PATH);
+generate('en', TEMPLATE_EN, README_EN_PATH);

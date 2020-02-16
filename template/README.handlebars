@@ -1,5 +1,7 @@
 # 2020新冠肺炎记忆：报道、非虚构与个人叙述（持续更新）
 
+{{!-- [英文版 / English Version](/README-en.md) --}}
+
 收录了2020年新型冠状病毒肺炎（中国卫健委命名 Novel Coronavirus Pneumonia, NCP；WHO 命名 COVID-19）相关媒体报道、非虚构作品和亲历者个人叙述。
 
 本站有一个更便于在手机上阅读的[版本](https://2019ncovmemory.github.io/nCovMemory/)。
@@ -7,7 +9,6 @@
 过去一日更新的文章前会加入🔥，已失效的链接用❌表示，附转载链接。截图会比链接稍晚更新，但一般不超过24小时。
 
 一部分 archive 由网友提供，深表感激。同时感谢许多网友与我们共享资料并提供建议。我们持续欢迎网友的参与和贡献，请见[如何贡献](#如何贡献)。
-
 
 ## 声明
 
@@ -21,13 +22,11 @@
 * [如何贡献](#如何贡献)
 * [工具](#工具)
 * [联系](#联系)
-* [传媒报道与非虚构写作](#传媒报道与非虚构写作)
-{{#each non_fiction.medias}}
-  * [{{@this}}](#{{link @this}})
-{{/each}}
-* [亲历者个人叙述](#亲历者个人叙述)
-{{#each narrative.medias}}
-  * [{{narrative @this}}](#{{narrative_link @this}})
+{{#each this}}
+* [{{@key}}](<#{{link @key}}>)
+  {{#each this}}
+  * [{{@key}}](<#{{link @key}}>)
+  {{/each}}
 {{/each}}
 * [友情站点](#友情站点)
 
@@ -110,30 +109,24 @@
 
 如发现链接失效，或有其他问题、建议，请发送email至2019ncovmemory@gmail.com。
 
-## 传媒报道与非虚构写作
+{{!-- category --}}
+{{#each this}}
+## {{@key}}
 
-{{#each non_fiction.articles}}
+{{!-- Media --}}
+{{#each this}}
 ### {{@key}}
 
-| 日期 | 标题 | 原始URL| 截图 | archive |
-|---|:----------|---|---|---|
-{{#each @this}}
-|{{date}}|{{#if is_new}}🔥 {{/if}}{{table title}}|{{#if is_deleted}}[❌]({{{url}}}){{#if alternative}}<sup>*[转载]({{{alternative}}})*</sup>{{/if}}{{else}}[link]({{{url}}}){{/if}}|{{#if jpg}}[link]({{{jpg}}}){{else if png}}[link]({{{png}}}){{else}}待补{{/if}}|{{#if archive}}[link]({{{archive}}}){{else}}待补{{/if}}|
+| 日期 | 标题 | 原始URL| 截图 | 翻译 | Archive |
+|---|:----------|---|---|---|---|
+{{!-- Article --}}
+{{#each this}}
+|{{date}}|{{#if is_new}}🔥 {{/if}}{{table title}}|{{#if is_deleted}}[❌]({{{url}}}){{#if alternative}}<sup>*[转载]({{{alternative}}})*</sup>{{/if}}{{else}}[link]({{{url}}}){{/if}}|{{#if jpg}}[link]({{{jpg}}}){{else if png}}[link]({{{png}}}){{else}}待补{{/if}}|{{#if translation}}[link]({{{translation}}}){{else}}暂无{{/if}}|{{#if archive}}[link]({{{archive}}}){{else}}待补{{/if}}|
 {{/each}}
 
 {{/each}}
-## 亲历者个人叙述
-
-{{#each narrative.articles}}
-### {{narrative @key}}
-
-| 日期 | 标题 | 原始URL| 截图 | archive |
-|---|:----------|---|---|---|
-{{#each @this}}
-|{{date}}|{{#if is_new}}🔥 {{/if}}{{table title}}|{{#if is_deleted}}[❌]({{{url}}}){{#if alternative}}<sup>*[转载]({{{alternative}}})*</sup>{{/if}}{{else}}[link]({{{url}}}){{/if}}|{{#if jpg}}[link]({{{jpg}}}){{else if png}}[link]({{{png}}}){{else}}待补{{/if}}|{{#if archive}}[link]({{{archive}}}){{else}}待补{{/if}}|
 {{/each}}
 
-{{/each}}
 ## 友情站点
 
 ### 本站相关的翻译和存档
